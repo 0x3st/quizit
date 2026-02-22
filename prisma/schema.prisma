@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ParseStatus {
+  UPLOADED
+  PARSING
+  PARSED
+  FAILED
+}
+
+enum GenerationStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  FILL_BLANK
+  SHORT_ANSWER
+  MATCHING
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model Material {
+  id           String      @id @default(cuid())
+  filename     String
+  originalName String
+  extension    String
+  mimeType     String
+  fileSize     Int
+  sha256       String      @unique
+  content      String?     @db.Text
+  parseStatus  ParseStatus @default(UPLOADED)
+  parseError   String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  quizzes      Quiz[]
+
+  @@index([parseStatus])
+}
+
+model Quiz {
+  id               String           @id @default(cuid())
+  title            String
+  description      String?
+  materialId       String
+  material         Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  questionCount    Int
+  difficulty       Difficulty       @default(MEDIUM)
+  generationStatus GenerationStatus @default(PENDING)
+  generationError  String?
+  provider         String?
+  model            String?
+  promptVersion    String?
+  inputTokens      Int?
+  outputTokens     Int?
+  generationMs     Int?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  questions        Question[]
+  attempts         QuizAttempt[]
+
+  @@index([materialId])
+  @@index([generationStatus])
+}
+
+model Question {
+  id            String       @id @default(cuid())
+  quizId        String
+  quiz          Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  type          QuestionType
+  content       String       @db.Text
+  options       Json?
+  correctAnswer Json
+  explanation   String?      @db.Text
+  points        Int          @default(1)
+  order         Int
+  answers       Answer[]
+
+  @@unique([quizId, order])
+  @@index([quizId])
+}
+
+model QuizAttempt {
+  id          String        @id @default(cuid())
+  quizId      String
+  quiz        Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  status      AttemptStatus @default(IN_PROGRESS)
+  score       Float?
+  totalPoints Int?
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  answers     Answer[]
+
+  @@index([quizId])
+  @@index([status])
+}
+
+model Answer {
+  id         String      @id @default(cuid())
+  attemptId  String
+  attempt    QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  userAnswer Json?
+  isCorrect  Boolean?
+  points     Float       @default(0)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
